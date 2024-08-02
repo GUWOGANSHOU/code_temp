@@ -1,46 +1,74 @@
-#coding=gb18030
+# coding=gb18030
 import pandas as pd
 import json
+from sklearn.model_selection import train_test_split
 
-# ¶ÁÈ¡CSVÎÄ¼ş
+# è¯»å–CSVæ–‡ä»¶
 csv_file_path = 'datasets/qwen/sample_IM5000-6000.csv'
 df = pd.read_csv(csv_file_path, encoding='ANSI')
 
-# ´´½¨Ò»¸ö¿ÕÁĞ±íÀ´±£´æ×ª»»ºóµÄÊı¾İ
-data_list = []
+# åˆ’åˆ†æ•°æ®é›†
+train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
 
-# ±éÀúDataFrameµÄÃ¿Ò»ĞĞ
-for index, row in df.iterrows():
-    # ¹¹ÔìĞÂµÄĞĞÊı¾İ
-    department = row['department'] + 'ÎÊÕï'
+# è½¬æ¢è®­ç»ƒé›†æ•°æ®
+train_data_list = []
+for index, row in train_df.iterrows():
+    department = row['department'] + 'é—®è¯Š'
     title = row['title']
     ask = row['ask']
     answer = row['answer']
 
-    # Æ´½ÓuserµÄvalue
-    user_value = f"{department}£¬{title}{ask}"
+    user_value = f"{department}ï¼Œ{title}{ask}"
 
-    # ´´½¨¶Ô»°½á¹¹
     conversations = [
         {"from": "user", "value": user_value},
         {"from": "assistant", "value": answer}
     ]
 
-    # ´´½¨ÍêÕûÌõÄ¿
     entry = {
         "id": f"identity_{index}",
         "conversations": conversations
     }
 
-    # Ìí¼Óµ½ÁĞ±íÖĞ
-    data_list.append(entry)
+    train_data_list.append(entry)
 
-# ½«Êı¾İĞòÁĞ»¯ÎªJSON¸ñÊ½
-json_data = json.dumps(data_list, indent=4, ensure_ascii=False)
+# å°†è®­ç»ƒé›†æ•°æ®åºåˆ—åŒ–ä¸ºJSONæ ¼å¼
+train_json_data = json.dumps(train_data_list, indent=4, ensure_ascii=False)
 
-# Ğ´ÈëJSONÎÄ¼ş
-json_file_path = './datasets/qwen/sample_IM5000-6000.json'
-with open(json_file_path, 'w', encoding='utf-8') as json_file:
-    json_file.write(json_data)
+# å†™å…¥è®­ç»ƒé›†JSONæ–‡ä»¶
+train_json_file_path = './datasets/qwen/train_sample_IM5000-6000.json'
+with open(train_json_file_path, 'w', encoding='utf-8') as json_file:
+    json_file.write(train_json_data)
 
-print(f"Data has been successfully converted to JSON format and saved to {json_file_path}")
+# è½¬æ¢éªŒè¯é›†æ•°æ®
+val_data_list = []
+for index, row in val_df.iterrows():
+    department = row['department'] + 'é—®è¯Š'
+    title = row['title']
+    ask = row['ask']
+    answer = row['answer']
+
+    user_value = f"{department}ï¼Œ{title}{ask}"
+
+    conversations = [
+        {"from": "user", "value": user_value},
+        {"from": "assistant", "value": answer}
+    ]
+
+    entry = {
+        "id": f"identity_{index}",
+        "conversations": conversations
+    }
+
+    val_data_list.append(entry)
+
+# å°†éªŒè¯é›†æ•°æ®åºåˆ—åŒ–ä¸ºJSONæ ¼å¼
+val_json_data = json.dumps(val_data_list, indent=4, ensure_ascii=False)
+
+# å†™å…¥éªŒè¯é›†JSONæ–‡ä»¶
+val_json_file_path = './datasets/qwen/val_sample_IM5000-6000.json'
+with open(val_json_file_path, 'w', encoding='utf-8') as json_file:
+    json_file.write(val_json_data)
+
+print(f"Train data has been successfully converted to JSON format and saved to {train_json_file_path}")
+print(f"Validation data has been successfully converted to JSON format and saved to {val_json_file_path}")
