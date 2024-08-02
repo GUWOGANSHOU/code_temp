@@ -1,0 +1,123 @@
+https://blog.csdn.net/gsgs1234/article/details/114753857
+
+
+使用labelme制作语义分割数据集，生成.json格式文件，将所有放置于一个文件夹下。
+
+
+2.找到labelme安装位置的json_to_dataset.py文件，
+
+
+将代码替换为：
+import argparse
+import json
+import os
+import os.path as osp
+import warnings
+import copy
+import numpy as np
+import PIL.Image
+from skimage import io
+import yaml
+from labelme import utils
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('json_file')  # 标注文件json所在的文件夹
+    parser.add_argument('-o', '--out', default=None)
+    args = parser.parse_args()
+
+    json_file = args.json_file
+
+    list = os.listdir(json_file)  # 获取json文件列表
+    out_dir = 'mask'
+    out_dir = osp.join(osp.dirname(json_file), out_dir)
+    if not osp.exists(out_dir):
+        os.mkdir(out_dir)
+
+    for i in range(0, len(list)):
+        path = os.path.join(json_file, list[i])  # 获取每个json文件的绝对路径
+        filename = list[i][:-5]  # 提取出.json前的字符作为文件名，以便后续保存Label图片的时候使用
+        extension = list[i][-4:]
+        if extension == 'json':
+            if os.path.isfile(path):
+                data = json.load(open(path))
+                img = utils.image.img_b64_to_arr(data['imageData'])  # 根据'imageData'字段的字符可以得到原图像
+                # lbl为label图片（标注的地方用类别名对应的数字来标，其他为0）lbl_names为label名和数字的对应关系字典
+                lbl, lbl_names = utils.shape.labelme_shapes_to_label(img.shape, data[
+                    'shapes'])  # data['shapes']是json文件中记录着标注的位置及label等信息的字段
+
+                # captions = ['%d: %s' % (l, name) for l, name in enumerate(lbl_names)]
+                # lbl_viz = utils.draw.draw_label(lbl, img, captions)
+                '''
+                out_dir = osp.basename(list[i])[:-5] + '_json'
+                out_dir = osp.join(osp.dirname(list[i]), out_dir)
+                if not osp.exists(out_dir):
+                    os.mkdir(out_dir)
+                '''
+
+                # PIL.Image.fromarray(img).save(osp.join(out_dir, '{}_source.png'.format(filename)))
+                PIL.Image.fromarray(lbl).save(osp.join(out_dir, '{}.png'.format(filename)))
+                # PIL.Image.fromarray(lbl_viz).save(osp.join(out_dir, '{}_viz.jpg'.format(filename)))
+                '''
+                with open(osp.join(out_dir, 'label_names.txt'), 'w') as f:
+                    for lbl_name in lbl_names:
+                        f.write(lbl_name + '\n')
+
+                warnings.warn('info.yaml is being replaced by label_names.txt')
+                info = dict(label_names=lbl_names)
+                with open(osp.join(out_dir, 'info.yaml'), 'w') as f:
+                    yaml.safe_dump(info, f, default_flow_style=False)
+                '''
+
+                print('Saved to: %s' % out_dir)
+
+
+if __name__ == '__main__':
+    main()
+
+
+
+3.打开终端，我的是在Anaconda Prompt中输入命令：
+labelme_json_to_dataset F:/2021_1(4-2)/ProjectNet/invoice/json
+
+…/json为所有json问价所在文件夹
+
+则在该目录下每个json文件会生成一个文件夹，包含以下四个文件。
+
+1_mask.png即为所需要的图片，图片已经进行了标记，全黑是因为标记的像素值为1,2等与背景黑色0十分接近，肉眼无法辨别，但在matlab中查看，
+
+4.建立MaskToRGB.py，运行可将其转化为彩色图片。
+
+
+
+import os
+from PIL import Image
+
+filepath=r'F:\2021_1(4-2)\ProjectNet\invoice\json\mask'
+total = os.listdir(filepath)
+savepath = r'F:\2021_1(4-2)\ProjectNet\invoice\json'
+
+num = len(total)
+list = range(num)
+
+
+for i in list:
+    filename = total[i][:-4] + '.png'
+    img = os.path.join(filepath, filename)
+    mask = Image.open(img).convert('L')
+    mask.putpalette([0, 0, 0,  # putpalette给对象加上调色板，相当于上色：背景为黑色，目标１为红色，目标2为黄色，目标3为橙色（如果你的图中有更多的目标，可以自行添加更多的调色值）
+                     255, 255, 255,
+                     255, 255, 0,
+                     255, 153, 0])
+
+    #filename2 = total[i][:-4] + '.png'
+    mask.save(os.path.join(savepath, filename))
+
+
+其中
+filepath为所有全黑的mask文件所在文件夹，
+savepath为转换后的彩色图片存储文件夹
+因为在两个文件夹内，所以转换后的文件我没改名，如果需要可以改filename2，再save。
+
+ps:每个json文件会生成一个文件夹,_mask.png位于各自的文件夹下，最后要统一放在一个文件夹中，为了调试通代码我只用了几张图片实验，将它们一个个复制过去，此后要是写了统一提取_mask.png并存放于同一文件夹下的代码再贴(0w0)。
