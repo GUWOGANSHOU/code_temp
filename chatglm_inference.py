@@ -1,13 +1,80 @@
+# ä¸‹è½½ requirements.txt å®‰è£…é…ç½®ç¯å¢ƒ
+pip install -r requirements.txt
+# modelscope ç”¨æ¥ä¸‹è½½ chatglm2-6b-int4
+pip install modelscope
+
+# å¾®è°ƒè¿˜éœ€è¦ä¸‹è½½çš„æ–‡ä»¶
+pip install rouge_chinese nltk jieba datasets 
+# ä¸ä¸€å®šéœ€è¦è£…deepspeed
+# pip install "peft<0.8.0" deepspeed
+
+# Ptuning
+# bash train.sh
+
+PRE_SEQ_LEN=128
+LR=2e-2
+NUM_GPUS=1
+
+torchrun --standalone --nnodes=1 --nproc-per-node=$NUM_GPUS main.py \
+    --do_train \
+    --train_file AdvertiseGen/train.json \
+    --validation_file AdvertiseGen/dev.json \
+    --preprocessing_num_workers 10 \
+    --prompt_column content \
+    --response_column summary \
+    --overwrite_cache \
+    --model_name_or_path /root/chatglm2-6b \
+    --output_dir output/adgen-chatglm2-6b-pt-$PRE_SEQ_LEN-$LR \
+    --overwrite_output_dir \
+    --max_source_length 64 \
+    --max_target_length 128 \
+    --per_device_train_batch_size 1 \
+    --per_device_eval_batch_size 1 \
+    --gradient_accumulation_steps 16 \
+    --predict_with_generate \
+    --max_steps 1000 \
+    --logging_steps 10 \
+    --save_steps 1000 \
+    --learning_rate $LR \
+    --pre_seq_len $PRE_SEQ_LEN \
+    --quantization_bit 4
+
+
+# bash evaluate.sh
+
+PRE_SEQ_LEN=128
+CHECKPOINT=adgen-chatglm2-6b-pt-128-2e-2
+STEP=1000
+NUM_GPUS=1
+
+
+torchrun --standalone --nnodes=1 --nproc-per-node=$NUM_GPUS main.py \
+    --do_predict \
+    --validation_file AdvertiseGen/dev.json \
+    --test_file AdvertiseGen/dev.json \
+    --overwrite_cache \
+    --prompt_column content \
+    --response_column summary \
+    --model_name_or_path /root/chatglm2-6b \
+    --ptuning_checkpoint ./output/$CHECKPOINT/checkpoint-$STEP \
+    --output_dir ./output/$CHECKPOINT \
+    --overwrite_output_dir \
+    --max_source_length 64 \
+    --max_target_length 64 \
+    --per_device_eval_batch_size 1 \
+    --predict_with_generate \
+    --pre_seq_len $PRE_SEQ_LEN \
+    --quantization_bit 4
+
 import os
 import torch
 from transformers import AutoConfig, AutoModel, AutoTokenizer
 
-# ÔØÈëTokenizer
-tokenizer = AutoTokenizer.from_pretrained("chatglm-6b", trust_remote_code=True)
-# ÔØÈëÄ£ĞÍ
-config = AutoConfig.from_pretrained("chatglm-6b", trust_remote_code=True, pre_seq_len=128)
-model = AutoModel.from_pretrained("chatglm-6b", config=config, trust_remote_code=True)
-CHECKPOINT_PATH = 'output/adgen-chatglm-6b-pt-128-2e-2/checkpoint-3000'
+CHECKPOINT_PATH = "/root/ChatGLM2-6B/ptuning/output/adgen-chatglm2-6b-pt-128-2e-2/checkpoint-1000"
+# è½½å…¥Tokenizer
+tokenizer = AutoTokenizer.from_pretrained("/root/chatglm2-6b", trust_remote_code=True)
+config = AutoConfig.from_pretrained("/root/chatglm2-6b", trust_remote_code=True, pre_seq_len=128)
+model = AutoModel.from_pretrained("/root/chatglm2-6b", config=config, trust_remote_code=True)
 prefix_state_dict = torch.load(os.path.join(CHECKPOINT_PATH, "pytorch_model.bin"))
 new_prefix_state_dict = {}
 for k, v in prefix_state_dict.items():
@@ -17,31 +84,30 @@ model.transformer.prefix_encoder.load_state_dict(new_prefix_state_dict)
 
 # Comment out the following line if you don't use quantization
 model = model.quantize(4)
-model = model.half().cuda()
-model.transformer.prefix_encoder.float()
+model = model.cuda()
 model = model.eval()
 
-response, history = model.chat(tokenizer, "ÀàĞÍ#¹¤×°¿ã*ÑÕÉ«#ÉîÀ¶É«*Í¼°¸#ÌõÎÆ*¿ã³¤#°Ë·Ö¿ã", history=[])
+response, history = model.chat(tokenizer, "ç±»å‹#å·¥è£…è£¤*é¢œè‰²#æ·±è“è‰²*å›¾æ¡ˆ#æ¡çº¹*è£¤é•¿#å…«åˆ†è£¤", history=[])
 print(response)
 
-'''
 import json
+with open('ChatGLM2-6B/ptuning/AdvertiseGen/test.json', 'r', encoding='utf-8') as file:
+    test_set = json.load(file)
 def generate_summaries(test_set):
     for item in test_set:
-        # ½«content×Ö¶Î×÷ÎªÊäÈë£¬µ÷ÓÃÄ£ĞÍÉú³ÉÕªÒª
+        # å°†contentå­—æ®µä½œä¸ºè¾“å…¥ï¼Œè°ƒç”¨æ¨¡å‹ç”Ÿæˆæ‘˜è¦
         response, history = model.chat(tokenizer, item["content"], history=[])
-        # Ö±½Ó½«Éú³ÉµÄÕªÒª´æ´¢ÔÚÔ­itemµÄsummary×Ö¶Î
+        # ç›´æ¥å°†ç”Ÿæˆçš„æ‘˜è¦å­˜å‚¨åœ¨åŸitemçš„summaryå­—æ®µ
         item["summary"] = response
     return test_set
-# µ÷ÓÃº¯ÊıÉú³ÉÕªÒª²¢¸üĞÂ²âÊÔ¼¯
+# è°ƒç”¨å‡½æ•°ç”Ÿæˆæ‘˜è¦å¹¶æ›´æ–°æµ‹è¯•é›†
 updated_test_set = generate_summaries(test_set)
-# ´òÓ¡½á¹û
+# æ‰“å°ç»“æœ
 for item in updated_test_set:
     print(item)
-# Ñ¡ÔñÒ»¸öÎÄ¼şÃûºÍÂ·¾¶À´±£´æ JSON Êı¾İ
+# é€‰æ‹©ä¸€ä¸ªæ–‡ä»¶åå’Œè·¯å¾„æ¥ä¿å­˜ JSON æ•°æ®
 file_path = 'updated_test_set.json'
-# Ê¹ÓÃ json Ä£¿é½«Êı¾İĞ´ÈëÎÄ¼ş
+# ä½¿ç”¨ json æ¨¡å—å°†æ•°æ®å†™å…¥æ–‡ä»¶
 with open(file_path, 'w', encoding='utf-8') as json_file:
     json.dump(updated_test_set, json_file, ensure_ascii=False, indent=4)
 print(f"Updated test set has been saved to {file_path}")
-'''
